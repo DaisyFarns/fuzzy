@@ -74,7 +74,7 @@ def manual_comparison():
 
     done = False
 
-    pairs = itertools.combinations(range(64), 2)
+    pairs = itertools.product(range(64), repeat=2)
     pairs = list(pairs)
     random.shuffle(pairs)
 
@@ -133,6 +133,10 @@ def manual_comparison():
     except (KeyboardInterrupt, EOFError):
         with open(FILEPATH, "w") as file:
             json.dump(similarity, file, indent=4)
+        print("Done!")
+
+    with open(FILEPATH, "w") as file:
+        json.dump(similarity, file, indent=4)
 
 def edit_similarity(char1, char2, value):
     check_file_exists()
