@@ -3,11 +3,14 @@ import os
 import itertools
 import random
 import re
+import base64
 
 import cv2
 from skimage.metrics import hausdorff_distance
 
-base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234567890+/"
+base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+assert len(base64chars) == 64
+base64.b64decode((base64chars + "==").encode())
 
 def gen_char_images():
     # os.mkdir("chars")
@@ -52,12 +55,16 @@ def gen_char_images():
 
 FILEPATH = "../base64similarities.json"
 
-def manual_comparison():
+def check_file_exists():
     if not os.path.isfile(FILEPATH):
         print("Creating file")
         f = open(FILEPATH, "w")
         json.dump([[None for _ in range(64)] for _ in range(64)], f)
         f.close()
+    
+
+def manual_comparison():
+    check_file_exists()
 
     with open(FILEPATH) as file:
         similarity = json.load(file)
@@ -71,43 +78,77 @@ def manual_comparison():
     pairs = list(pairs)
     random.shuffle(pairs)
 
-    
-
+    inputs_made = 0
+        
     try:
         while not done:
-            for i in range(10):
-                try:
-                    pair = pairs.pop(-1)
-                except IndexError:
-                    continue
 
-                if similarity[pair[0]][pair[1]] is None:
+            try:
+                pair = pairs.pop(-1)
+            except IndexError:
+                done = True
+                continue
 
-                    correct = False
-                    while not correct:
+            if similarity[pair[0]][pair[1]] is None:
 
-                        inp = input(
-                                f"{base64chars[pair[0]]} - {base64chars[pair[1]]} > "
-                            )
+                correct = False
+                while not correct:
 
-                        if re.match(r"^[0-9]$", inp):
-                            correct = True
+                    if pair[0] == pair[1]:
+                        inp = 10
+                        correct = True
+                        print(pair)
+                        continue
 
-                    similarity[pair[0]][pair[1]] = int(inp)
-                    similarity[pair[1]][pair[0]] = int(inp)
+                    inp = input(
+                            f"{base64chars[pair[0]]} - {base64chars[pair[1]]} > "
+                        )
 
-                              
-            with open(FILEPATH, "w") as file:
-                json.dump(similarity, file, indent=4)
+                    if re.match(r"^[0-9]$", inp):
+                        correct = True
+                        inputs_made += 1
+
+                similarity[pair[0]][pair[1]] = int(inp)
+                similarity[pair[1]][pair[0]] = int(inp)
+            else:
+                continue
+
+            if inputs_made % 10 == 0:
+                with open(FILEPATH, "w") as file:
+                    json.dump(similarity, file, indent=4)
+
+                full_count = 0
+                total = 0
+                for i,j in itertools.product(range(64), repeat=2):
+                    if similarity[i][j] is not None:
+                        full_count += 1
+                    total += 1
+
+                print(f"{full_count} / {total}: {round(full_count * 100 / total, 1)}%")
 
             if len(pairs) == 0:
                 done = True
+                raise KeyboardInterrupt
 
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         with open(FILEPATH, "w") as file:
             json.dump(similarity, file, indent=4)
 
+def edit_similarity(char1, char2, value):
+    check_file_exists()
+    
+    with open(FILEPATH) as file:
+        similarity = json.load(file)
 
+    char1_index = base64chars.index(char1)
+    char2_index = base64chars.index(char2)
+
+    similarity[char1_index][char2_index] = value
+    similarity[char2_index][char1_index] = value
+
+    with open(FILEPATH, "w") as file:
+        json.dump(similarity, file, indent=4)
 
 if __name__ == "__main__":
+    edit_similarity("n", "v", 0)
     manual_comparison()
