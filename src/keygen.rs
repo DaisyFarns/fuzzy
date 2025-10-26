@@ -1,5 +1,8 @@
+#![allow(dead_code)]
+
 use ssh_key::{Algorithm, HashAlg, PrivateKey, PublicKey, rand_core::OsRng};
 
+use std::collections::HashMap;
 use std::{sync::Mutex, time};
 
 // super::constants::KEYS_PER_THREAD;
@@ -14,7 +17,11 @@ pub struct BestFingerprint {
     quailty: f32,
 }
 
-pub fn worker_function(target_fingerprint: &str, best_result: Mutex<BestFingerprint>) {
+pub fn worker_function(
+    target_fingerprint: &str,
+    best_result: Mutex<BestFingerprint>,
+    similarity: HashMap<(u8, u8), u8>,
+) {
     for _ in 0..constants::KEYS_PER_THREAD {
         let private_key = PrivateKey::random(&mut OsRng, constants::KEY_TYPE).unwrap();
         let public_key = private_key.public_key();
@@ -57,6 +64,7 @@ pub fn test_worker() {
     worker_function(
         "+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
         Mutex::new(best),
+        HashMap::new(),
     );
 }
 
@@ -69,15 +77,15 @@ pub fn test_quaility() {
 
     println!("Current {}", fingerprint.to_string());
 
-    dbg!(quality::gen_attention_map(&fingerprint.to_string()));
+    dbg!(quality::gen_attention_vec(&fingerprint.to_string()));
 }
 
-pub fn test_similarity() {
+pub fn test_similarity_map() {
     let sim_map = quality::get_similarity_map("base64similarities.json");
     dbg!(&sim_map);
 
-    assert!(sim_map.get(&(3_u8, 3_u8)) == Some(&10_u8));
-    assert!(*sim_map.get(&(34_u8, 35_u8)).unwrap() > 0);
+    assert!(sim_map.get(&(3_u8, 3_u8)) == Some(&0.0));
+    assert!(*sim_map.get(&(34_u8, 35_u8)).unwrap() > 0.0);
 
     println!("Assertions complete");
 }
