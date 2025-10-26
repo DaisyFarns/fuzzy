@@ -4,6 +4,6 @@ mod quality;
 
 fn main() {
     println!("Hi!");
-    keygen::test_quaility();
+    keygen::test_similarity();
     println!("Done :3")
 }
