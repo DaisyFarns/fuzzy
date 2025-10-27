@@ -3,6 +3,7 @@
 use ssh_key::{Algorithm, HashAlg, PrivateKey, PublicKey, rand_core::OsRng};
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::{sync::Mutex, time};
 
 // super::constants::KEYS_PER_THREAD;
@@ -10,25 +11,96 @@ use std::{sync::Mutex, time};
 use crate::constants;
 use crate::quality;
 
-pub struct BestFingerprint {
-    public_key: PublicKey,
-    private_key: PrivateKey,
-    fingerprint: ssh_key::Fingerprint,
-    quailty: f32,
+#[derive(Debug)]
+pub struct FingerprintQuality {
+    pub private_key: PrivateKey,
+    pub quailty: f32,
+}
+
+impl FingerprintQuality {
+    fn fingerprint(&self) -> String {
+        return self
+            .private_key
+            .public_key()
+            .fingerprint(constants::FINGERPRINT_HASH_ALGORITM)
+            .to_string();
+    }
+}
+
+#[derive(Debug)]
+pub struct BestFingerprints {
+    best_keys: Vec<FingerprintQuality>,
+    minimum_quaility: f32,
+}
+
+impl BestFingerprints {
+    fn new() -> BestFingerprints {
+        BestFingerprints {
+            best_keys: Vec::new(),
+            minimum_quaility: 0.0,
+        }
+    }
+
+    fn get_best_keys(&self) -> &Vec<FingerprintQuality> {
+        return &self.best_keys;
+    }
+
+    fn get_lowest_quality(&self) -> f32 {
+        return self.minimum_quaility;
+    }
+
+    fn add(&mut self, new_key: FingerprintQuality) {
+        if new_key.quailty < self.minimum_quaility {
+            return;
+        }
+
+        let index = self
+            .best_keys
+            .binary_search_by(|x| new_key.quailty.total_cmp(&x.quailty))
+            .unwrap_or_else(|x| x);
+
+        self.best_keys.insert(index, new_key);
+    }
 }
 
 pub fn worker_function(
     target_fingerprint: &str,
-    best_result: Mutex<BestFingerprint>,
-    similarity: HashMap<(u8, u8), u8>,
+    best_results: Arc<Mutex<BestFingerprints>>,
+    similarity: &HashMap<(u8, u8), f32>,
+    attention_vec: &Vec<f32>,
 ) {
+    let target_base64_index =
+        quality::fingerprint_str_to_b64_index(quality::strip_fingerprint(target_fingerprint));
+
+    let mut local_minimum_quaility = 0.0;
+
     for _ in 0..constants::KEYS_PER_THREAD {
         let private_key = PrivateKey::random(&mut OsRng, constants::KEY_TYPE).unwrap();
         let public_key = private_key.public_key();
 
-        let fingerprint = public_key.fingerprint(constants::FINGERPRINT_HASH_ALGORITM);
+        let fingerprint = public_key
+            .fingerprint(constants::FINGERPRINT_HASH_ALGORITM)
+            .to_string();
 
-        // Process fingerprint, check quailty
+        let fingerprint_quality = FingerprintQuality {
+            private_key,
+            quailty: quality::fingerprint_quality(
+                &target_base64_index,
+                quality::strip_fingerprint(&fingerprint),
+                similarity,
+                attention_vec,
+            ),
+        };
+
+        // Check that the last seen lowest value
+        if fingerprint_quality.quailty > local_minimum_quaility {
+            let mut best_results_inner = best_results.lock().unwrap();
+
+            local_minimum_quaility = best_results_inner.minimum_quaility;
+
+            // May or may not add
+            best_results_inner.add(fingerprint_quality);
+        }
     }
 }
 
@@ -49,23 +121,30 @@ pub fn test_fingerprint_generation() {
 
 pub fn test_worker() {
     let skey = PrivateKey::random(&mut OsRng, Algorithm::Ed25519).unwrap();
-    let binding = skey.clone();
-    let pub_key = binding.public_key();
+    let pub_key = skey.public_key();
 
-    let fingerprint = pub_key.fingerprint(HashAlg::Sha256);
+    let target_fingerprint = pub_key.fingerprint(HashAlg::Sha256).to_string();
 
-    let best = BestFingerprint {
-        private_key: skey,
-        public_key: pub_key.clone(),
-        fingerprint: fingerprint,
-        quailty: 0.0,
-    };
+    println!("Target: {}", target_fingerprint.to_string());
+
+    let best_fingerprints = Arc::new(Mutex::new(BestFingerprints::new()));
+
+    let attention_vec = quality::gen_attention_vec(&target_fingerprint);
+    let similarity = quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
 
     worker_function(
-        "+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
-        Mutex::new(best),
-        HashMap::new(),
+        &target_fingerprint,
+        Arc::clone(&best_fingerprints),
+        &similarity,
+        &attention_vec,
     );
+
+    let inner_best_keys = best_fingerprints.lock().unwrap();
+
+    println!(
+        "Result: {}",
+        inner_best_keys.best_keys.first().unwrap().fingerprint()
+    )
 }
 
 pub fn test_quaility() {

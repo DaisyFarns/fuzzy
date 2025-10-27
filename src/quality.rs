@@ -23,7 +23,7 @@ pub fn strip_fingerprint(fingerprint: &str) -> &str {
 pub fn gen_attention_vec(target_fingerprint_str: &str) -> Vec<f32> {
     let mut attention = Vec::new();
 
-    let attention_function = |x: f32| -> f32 { return (4.0 * (x - 0.5) * (x * 0.5)).max(0.1) };
+    let attention_function = |x: f32| -> f32 { return (4.0 * (x - 0.5) * (x - 0.5)).max(0.1) };
 
     let target_fingerprint_str = strip_fingerprint(target_fingerprint_str);
 
@@ -55,8 +55,6 @@ pub fn get_similarity_map(filepath: &str) -> SimilarityMap {
     let json_file = fs::File::open(filepath).expect(&format!("Can't open {}", filepath));
 
     let similarity: serde_json::Value = serde_json::from_reader(json_file).unwrap();
-    dbg!(&similarity);
-
     for i in 0..64 {
         for j in i..64 {
             if let serde_json::Value::Number(pair_similarity) = &similarity[i][j] {

@@ -5,6 +5,6 @@ mod tests;
 
 fn main() {
     println!("Hi!");
-    keygen::test_similarity_map();
+    keygen::test_worker();
     println!("Done :3")
 }
