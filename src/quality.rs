@@ -23,7 +23,7 @@ pub fn strip_fingerprint(fingerprint: &str) -> &str {
 pub fn gen_attention_vec(target_fingerprint_str: &str) -> Vec<f32> {
     let mut attention = Vec::new();
 
-    let attention_function = |x: f32| -> f32 { return (4.0 * x * x).max(0.1) };
+    let attention_function = |x: f32| -> f32 { return (4.0 * (x - 0.5) * (x * 0.5)).max(0.1) };
 
     let target_fingerprint_str = strip_fingerprint(target_fingerprint_str);
 

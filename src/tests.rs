@@ -84,5 +84,5 @@ fn example_quaility() {
             &similarity_map,
             &attention
         ) < 0.05
-    )
+    );
 }
