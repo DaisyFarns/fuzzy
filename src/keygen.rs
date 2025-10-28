@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 
+use rayon::prelude::*;
 use ssh_key::{Algorithm, HashAlg, PrivateKey, PublicKey, rand_core::OsRng};
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::{iter, thread};
 use std::{sync::Mutex, time};
 
 // super::constants::KEYS_PER_THREAD;
@@ -19,11 +21,14 @@ pub struct FingerprintQuality {
 
 impl FingerprintQuality {
     fn fingerprint(&self) -> String {
-        return self
-            .private_key
-            .public_key()
-            .fingerprint(constants::FINGERPRINT_HASH_ALGORITM)
-            .to_string();
+        return quality::strip_fingerprint(
+            &self
+                .private_key
+                .public_key()
+                .fingerprint(constants::FINGERPRINT_HASH_ALGORITM)
+                .to_string(),
+        )
+        .to_string();
     }
 }
 
@@ -60,6 +65,14 @@ impl BestFingerprints {
             .unwrap_or_else(|x| x);
 
         self.best_keys.insert(index, new_key);
+
+        if self.best_keys.len() > constants::BEST_KEYS_NUMBER {
+            self.best_keys.pop();
+
+            self.minimum_quaility = self.best_keys.last().expect("Checked length").quailty;
+
+            println!("New min {}", self.minimum_quaility);
+        }
     }
 }
 
@@ -102,6 +115,63 @@ pub fn worker_function(
             best_results_inner.add(fingerprint_quality);
         }
     }
+}
+
+pub fn display_status_thread(
+    best_keys: Arc<Mutex<BestFingerprints>>,
+    target: &str,
+    start_time: time::Instant,
+) {
+    loop {
+        thread::sleep(constants::SLEEP_DURATION);
+
+        let inner = best_keys.lock().unwrap();
+        let best_result = inner.best_keys.first().expect("No fingerprints yet");
+
+        println!("");
+        println!("Time: {}", start_time.elapsed().as_secs());
+        println!("Best Quality: {}", best_result.quailty);
+        println!("Best Fingerprint:   {}", best_result.fingerprint());
+        println!("Target Fingerprint: {}", target);
+    }
+}
+
+pub fn generate_keys(target_fingerprint: &str) {
+    // rayon with iter::repeat for endless iterator, plus a printing and writing
+    // to disk task
+
+    let best_keys = Arc::new(Mutex::new(BestFingerprints::new()));
+
+    let attention = quality::gen_attention_vec(target_fingerprint);
+    let similarity = quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
+
+    let endless_iter = iter::repeat(Arc::clone(&best_keys));
+
+    let endless_iter = endless_iter
+        .par_bridge()
+        .into_par_iter()
+        .map(|thread_best_keys| {
+            worker_function(
+                &target_fingerprint,
+                thread_best_keys,
+                &similarity,
+                &attention,
+            );
+
+            return false;
+        });
+
+    let start_time = time::Instant::now();
+
+    let target_fingerprint_cloned = target_fingerprint.to_string();
+    let record_thread = thread::spawn(move || {
+        display_status_thread(best_keys, &target_fingerprint_cloned, start_time);
+    });
+
+    // Will never end
+    endless_iter.find_any(|x| *x);
+    record_thread.join().unwrap();
+    return;
 }
 
 #[allow(dead_code)]

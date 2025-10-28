@@ -5,6 +5,6 @@ mod tests;
 
 fn main() {
     println!("Hi!");
-    keygen::test_worker();
+    keygen::generate_keys("+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU");
     println!("Done :3")
 }
