@@ -4,7 +4,8 @@ mod quality;
 mod tests;
 
 fn main() {
-    println!("Hi!");
-    keygen::generate_keys("+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU");
-    println!("Done :3")
+    // keygen::start_new_fingerprint("+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU")
+    keygen::continue_from_checkpoint();
 }
+
+// TODO Adjust attention function to be much better

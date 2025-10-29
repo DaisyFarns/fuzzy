@@ -1,5 +1,4 @@
 use ssh_key::{Algorithm, HashAlg};
-use std::path;
 use std::time;
 
 pub const KEYS_PER_THREAD: u32 = 10_000;

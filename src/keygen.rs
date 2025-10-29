@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ssh_key::LineEnding;
 use ssh_key::{Algorithm, HashAlg, PrivateKey, rand_core::OsRng};
@@ -8,6 +9,7 @@ use ssh_key::{Algorithm, HashAlg, PrivateKey, rand_core::OsRng};
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::{fs, iter, path, thread};
 use std::{sync::Mutex, time};
 
@@ -131,6 +133,48 @@ impl BestFingerprints {
                 .unwrap();
         }
     }
+
+    fn from_checkpoint(data: &CheckPoint) -> BestFingerprints {
+        let mut best_keys = Vec::new();
+
+        let attention = quality::gen_attention_vec(&data.target);
+        let similarity = quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
+
+        let target_base64_index =
+            quality::fingerprint_str_to_b64_index(quality::strip_fingerprint(&data.target));
+
+        for private_key_text in &data.best_private_keys {
+            let private_key =
+                PrivateKey::from_openssh(private_key_text).expect("Checkpoint file corrupted");
+            let fingerprint = private_key
+                .public_key()
+                .fingerprint(constants::FINGERPRINT_HASH_ALGORITHM)
+                .to_string();
+
+            let fingerprint_quality = FingerprintQuality {
+                private_key,
+                quality: quality::fingerprint_quality(
+                    &target_base64_index,
+                    quality::strip_fingerprint(&fingerprint),
+                    &similarity,
+                    &attention,
+                ),
+            };
+
+            best_keys.push(fingerprint_quality);
+        }
+
+        let minimum_quality = best_keys
+            .iter()
+            .map(|x| x.quality)
+            .min_by(|x, y| x.total_cmp(y))
+            .expect("Checkpoint file corrupt");
+
+        return BestFingerprints {
+            best_keys,
+            minimum_quality,
+        };
+    }
 }
 
 pub fn worker_function(
@@ -194,8 +238,34 @@ pub fn display_status_thread(
     }
 }
 
-pub fn generate_keys(target_fingerprint: &str) {
-    let best_keys = Arc::new(Mutex::new(BestFingerprints::new()));
+pub fn start_new_fingerprint(target_fingerprint: &str) {
+    generate_keys(target_fingerprint, BestFingerprints::new());
+}
+
+#[derive(Serialize, Deserialize)]
+struct CheckPoint {
+    target: String,
+    best_private_keys: Vec<String>,
+}
+
+pub fn continue_from_checkpoint() {
+    let checkpoint_filepath =
+        path::Path::new(constants::KEYS_DIRECTORY).join(constants::CHECKPOINT_FILENAME);
+    let checkpoint_file = fs::File::open(checkpoint_filepath)
+        .unwrap_or_else(|e| panic!("Couldn't open checkpoint file: {}", e));
+    let checkpoint: CheckPoint = serde_json::from_reader(checkpoint_file)
+        .unwrap_or_else(|e| panic!("Failed to parse JSON checkpoint: {}", e));
+
+    println!("Continuing fingerprint {}", checkpoint.target);
+
+    generate_keys(
+        &checkpoint.target,
+        BestFingerprints::from_checkpoint(&checkpoint),
+    );
+}
+
+fn generate_keys(target_fingerprint: &str, best_keys: BestFingerprints) {
+    let best_keys = Arc::new(Mutex::new(best_keys));
 
     let attention = quality::gen_attention_vec(target_fingerprint);
     let similarity = quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
@@ -294,8 +364,5 @@ pub fn test_similarity_map() {
     println!("Assertions complete");
 }
 
-// TODO Save keys as checkpoints
-// TODO Load keys from checkpoints
-
-// TODO Calcuate keys per second. Maybe a AtomicU64 incremented when each
+// TODO Calculate keys per second. Maybe a AtomicU64 incremented when each
 // worker thread finishes? which is then accessed by the record thread
