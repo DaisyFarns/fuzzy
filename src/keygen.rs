@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 
 use rayon::prelude::*;
-use ssh_key::{Algorithm, HashAlg, PrivateKey, PublicKey, rand_core::OsRng};
+use serde_json::json;
+use ssh_key::LineEnding;
+use ssh_key::{Algorithm, HashAlg, PrivateKey, rand_core::OsRng};
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::sync::Arc;
-use std::{iter, thread};
+use std::{fs, iter, path, thread};
 use std::{sync::Mutex, time};
 
 // super::constants::KEYS_PER_THREAD;
@@ -16,7 +19,7 @@ use crate::quality;
 #[derive(Debug)]
 pub struct FingerprintQuality {
     pub private_key: PrivateKey,
-    pub quailty: f32,
+    pub quality: f32,
 }
 
 impl FingerprintQuality {
@@ -25,7 +28,7 @@ impl FingerprintQuality {
             &self
                 .private_key
                 .public_key()
-                .fingerprint(constants::FINGERPRINT_HASH_ALGORITM)
+                .fingerprint(constants::FINGERPRINT_HASH_ALGORITHM)
                 .to_string(),
         )
         .to_string();
@@ -35,14 +38,14 @@ impl FingerprintQuality {
 #[derive(Debug)]
 pub struct BestFingerprints {
     best_keys: Vec<FingerprintQuality>,
-    minimum_quaility: f32,
+    minimum_quality: f32,
 }
 
 impl BestFingerprints {
     fn new() -> BestFingerprints {
         BestFingerprints {
             best_keys: Vec::new(),
-            minimum_quaility: 0.0,
+            minimum_quality: 0.0,
         }
     }
 
@@ -51,17 +54,17 @@ impl BestFingerprints {
     }
 
     fn get_lowest_quality(&self) -> f32 {
-        return self.minimum_quaility;
+        return self.minimum_quality;
     }
 
     fn add(&mut self, new_key: FingerprintQuality) {
-        if new_key.quailty < self.minimum_quaility {
+        if new_key.quality < self.minimum_quality {
             return;
         }
 
         let index = self
             .best_keys
-            .binary_search_by(|x| new_key.quailty.total_cmp(&x.quailty))
+            .binary_search_by(|x| new_key.quality.total_cmp(&x.quality))
             .unwrap_or_else(|x| x);
 
         self.best_keys.insert(index, new_key);
@@ -69,9 +72,63 @@ impl BestFingerprints {
         if self.best_keys.len() > constants::BEST_KEYS_NUMBER {
             self.best_keys.pop();
 
-            self.minimum_quaility = self.best_keys.last().expect("Checked length").quailty;
+            self.minimum_quality = self.best_keys.last().expect("Checked length").quality;
+        }
+    }
 
-            println!("New min {}", self.minimum_quaility);
+    // Save a checkpoint
+    fn save_checkpoint(&self, target_fingerprint: &str) {
+        // See if Keys directory exists, if not create it
+
+        if !fs::exists(constants::KEYS_DIRECTORY).unwrap() {
+            fs::create_dir(constants::KEYS_DIRECTORY).unwrap();
+        }
+
+        let private_keys: Vec<_> = self
+            .best_keys
+            .iter()
+            .map(|x| {
+                x.private_key
+                    .to_openssh(LineEnding::default())
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+
+        let checkpoint = json!({
+            "target": target_fingerprint,
+            "best_private_keys": private_keys
+        });
+
+        let checkpoint_filepath =
+            path::Path::new(constants::KEYS_DIRECTORY).join(constants::CHECKPOINT_FILENAME);
+        let checkpoint_file = fs::File::create(checkpoint_filepath).unwrap();
+
+        // Write checkpoint to file
+        serde_json::to_writer_pretty(checkpoint_file, &checkpoint).unwrap();
+
+        // Create spoofed ssh public and private keys
+
+        for (index, key_info) in self.best_keys.iter().enumerate() {
+            let private_key = &key_info.private_key;
+
+            let private_key_string = private_key.to_openssh(LineEnding::default()).unwrap();
+
+            let public_key_string = private_key.public_key().to_openssh().unwrap();
+
+            let key_path = path::Path::new(constants::KEYS_DIRECTORY);
+            let private_key_file = key_path.join(format!("{}_id_spoof", index));
+            let public_key_file = key_path.join(format!("{}_id_spoof.pub", index));
+
+            fs::File::create(private_key_file)
+                .unwrap()
+                .write(private_key_string.as_bytes())
+                .unwrap();
+
+            fs::File::create(public_key_file)
+                .unwrap()
+                .write(public_key_string.as_bytes())
+                .unwrap();
         }
     }
 }
@@ -85,19 +142,19 @@ pub fn worker_function(
     let target_base64_index =
         quality::fingerprint_str_to_b64_index(quality::strip_fingerprint(target_fingerprint));
 
-    let mut local_minimum_quaility = 0.0;
+    let mut local_minimum_quality = 0.0;
 
     for _ in 0..constants::KEYS_PER_THREAD {
         let private_key = PrivateKey::random(&mut OsRng, constants::KEY_TYPE).unwrap();
         let public_key = private_key.public_key();
 
         let fingerprint = public_key
-            .fingerprint(constants::FINGERPRINT_HASH_ALGORITM)
+            .fingerprint(constants::FINGERPRINT_HASH_ALGORITHM)
             .to_string();
 
         let fingerprint_quality = FingerprintQuality {
             private_key,
-            quailty: quality::fingerprint_quality(
+            quality: quality::fingerprint_quality(
                 &target_base64_index,
                 quality::strip_fingerprint(&fingerprint),
                 similarity,
@@ -106,10 +163,10 @@ pub fn worker_function(
         };
 
         // Check that the last seen lowest value
-        if fingerprint_quality.quailty > local_minimum_quaility {
+        if fingerprint_quality.quality > local_minimum_quality {
             let mut best_results_inner = best_results.lock().unwrap();
 
-            local_minimum_quaility = best_results_inner.minimum_quaility;
+            local_minimum_quality = best_results_inner.minimum_quality;
 
             // May or may not add
             best_results_inner.add(fingerprint_quality);
@@ -127,19 +184,17 @@ pub fn display_status_thread(
 
         let inner = best_keys.lock().unwrap();
         let best_result = inner.best_keys.first().expect("No fingerprints yet");
+        inner.save_checkpoint(target);
 
         println!("");
         println!("Time: {}", start_time.elapsed().as_secs());
-        println!("Best Quality: {}", best_result.quailty);
+        println!("Best Quality: {}", best_result.quality);
         println!("Best Fingerprint:   {}", best_result.fingerprint());
         println!("Target Fingerprint: {}", target);
     }
 }
 
 pub fn generate_keys(target_fingerprint: &str) {
-    // rayon with iter::repeat for endless iterator, plus a printing and writing
-    // to disk task
-
     let best_keys = Arc::new(Mutex::new(BestFingerprints::new()));
 
     let attention = quality::gen_attention_vec(target_fingerprint);
@@ -238,3 +293,9 @@ pub fn test_similarity_map() {
 
     println!("Assertions complete");
 }
+
+// TODO Save keys as checkpoints
+// TODO Load keys from checkpoints
+
+// TODO Calcuate keys per second. Maybe a AtomicU64 incremented when each
+// worker thread finishes? which is then accessed by the record thread
