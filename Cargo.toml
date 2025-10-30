@@ -2,10 +2,13 @@
 name = "fuzzy"
 version = "0.1.0"
 edition = "2024"
+description = "Brute force SSH keys to match given fingerprints"
 
 [dependencies]
+clap = { version = "4.5.51", features = ["derive"] }
 rand_chacha = { version = "0.9.0", features = ["os_rng"] }
 rayon = "1.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 ssh-key = { version = "0.6.7", features = ["rsa", "ed25519", "p256", "p384", "p521", "dsa"] }
+thiserror = "2.0.17"

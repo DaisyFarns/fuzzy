@@ -7,9 +7,9 @@ use ssh_key::LineEnding;
 use ssh_key::{Algorithm, HashAlg, PrivateKey, rand_core::OsRng};
 
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{self, Write};
 use std::sync::Arc;
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{fs, iter, path, thread};
 use std::{sync::Mutex, time};
 
@@ -182,6 +182,7 @@ pub fn worker_function(
     best_results: Arc<Mutex<BestFingerprints>>,
     similarity: &HashMap<(u8, u8), f32>,
     attention_vec: &Vec<f32>,
+    total_count: Arc<AtomicU64>,
 ) {
     let target_base64_index =
         quality::fingerprint_str_to_b64_index(quality::strip_fingerprint(target_fingerprint));
@@ -215,6 +216,8 @@ pub fn worker_function(
             // May or may not add
             best_results_inner.add(fingerprint_quality);
         }
+
+        total_count.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -222,6 +225,7 @@ pub fn display_status_thread(
     best_keys: Arc<Mutex<BestFingerprints>>,
     target: &str,
     start_time: time::Instant,
+    total_keys: Arc<AtomicU64>,
 ) {
     loop {
         thread::sleep(constants::SLEEP_DURATION);
@@ -230,8 +234,15 @@ pub fn display_status_thread(
         let best_result = inner.best_keys.first().expect("No fingerprints yet");
         inner.save_checkpoint(target);
 
+        let key_gen_rate =
+            total_keys.load(Ordering::Relaxed) as f64 / start_time.elapsed().as_secs_f64();
+
         println!("");
-        println!("Time: {}", start_time.elapsed().as_secs());
+        println!(
+            "Time: {} ({:.2}k keys / s)",
+            start_time.elapsed().as_secs(),
+            key_gen_rate / 1000.0
+        );
         println!("Best Quality: {}", best_result.quality);
         println!("Best Fingerprint:   {}", best_result.fingerprint());
         println!("Target Fingerprint: {}", target);
@@ -248,11 +259,10 @@ struct CheckPoint {
     best_private_keys: Vec<String>,
 }
 
-pub fn continue_from_checkpoint() {
+pub fn continue_from_checkpoint() -> io::Result<()> {
     let checkpoint_filepath =
         path::Path::new(constants::KEYS_DIRECTORY).join(constants::CHECKPOINT_FILENAME);
-    let checkpoint_file = fs::File::open(checkpoint_filepath)
-        .unwrap_or_else(|e| panic!("Couldn't open checkpoint file: {}", e));
+    let checkpoint_file = fs::File::open(checkpoint_filepath)?;
     let checkpoint: CheckPoint = serde_json::from_reader(checkpoint_file)
         .unwrap_or_else(|e| panic!("Failed to parse JSON checkpoint: {}", e));
 
@@ -262,6 +272,8 @@ pub fn continue_from_checkpoint() {
         &checkpoint.target,
         BestFingerprints::from_checkpoint(&checkpoint),
     );
+
+    return io::Result::Ok(());
 }
 
 fn generate_keys(target_fingerprint: &str, best_keys: BestFingerprints) {
@@ -270,27 +282,37 @@ fn generate_keys(target_fingerprint: &str, best_keys: BestFingerprints) {
     let attention = quality::gen_attention_vec(target_fingerprint);
     let similarity = quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
 
-    let endless_iter = iter::repeat(Arc::clone(&best_keys));
+    let total_keys_generated = Arc::new(AtomicU64::new(0));
 
-    let endless_iter = endless_iter
-        .par_bridge()
-        .into_par_iter()
-        .map(|thread_best_keys| {
-            worker_function(
-                &target_fingerprint,
-                thread_best_keys,
-                &similarity,
-                &attention,
-            );
+    let endless_iter = iter::repeat((Arc::clone(&best_keys), Arc::clone(&total_keys_generated)));
 
-            return false;
-        });
+    let endless_iter =
+        endless_iter
+            .par_bridge()
+            .into_par_iter()
+            .map(|(thread_best_keys, thread_total_keys)| {
+                worker_function(
+                    &target_fingerprint,
+                    thread_best_keys,
+                    &similarity,
+                    &attention,
+                    thread_total_keys,
+                );
+
+                return false;
+            });
 
     let start_time = time::Instant::now();
 
     let target_fingerprint_cloned = target_fingerprint.to_string();
+    let total_keys_cloned = Arc::clone(&total_keys_generated);
     let record_thread = thread::spawn(move || {
-        display_status_thread(best_keys, &target_fingerprint_cloned, start_time);
+        display_status_thread(
+            best_keys,
+            &target_fingerprint_cloned,
+            start_time,
+            total_keys_cloned,
+        );
     });
 
     // Will never end
@@ -332,6 +354,7 @@ pub fn test_worker() {
         Arc::clone(&best_fingerprints),
         &similarity,
         &attention_vec,
+        Arc::new(AtomicU64::new(0)),
     );
 
     let inner_best_keys = best_fingerprints.lock().unwrap();
@@ -363,6 +386,3 @@ pub fn test_similarity_map() {
 
     println!("Assertions complete");
 }
-
-// TODO Calculate keys per second. Maybe a AtomicU64 incremented when each
-// worker thread finishes? which is then accessed by the record thread

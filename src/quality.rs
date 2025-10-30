@@ -23,11 +23,20 @@ pub fn strip_fingerprint(fingerprint: &str) -> &str {
 pub fn gen_attention_vec(target_fingerprint_str: &str) -> Vec<f32> {
     let mut attention = Vec::new();
 
-    let attention_function = |x: f32| -> f32 { return (4.0 * (x - 0.5) * (x - 0.5)).max(0.1) };
+    // Generate an exponential curve
+
+    let lambda = 16.2;
+    let exponential_curve = |x: f32| std::f32::consts::E.powf(-1.0 * lambda * x);
+
+    let attention_function = |x: f32| -> f32 {
+        exponential_curve(x)
+            .max(0.5 * exponential_curve(-x + 1.0))
+            .max(0.01)
+    };
 
     let target_fingerprint_str = strip_fingerprint(target_fingerprint_str);
 
-    // Liner interprilation of the attention_function
+    // Liner interpolation of the attention_function
 
     let fingerprint_length = target_fingerprint_str.len();
     let step_size: f32 = 1.0 / fingerprint_length as f32;
@@ -38,6 +47,8 @@ pub fn gen_attention_vec(target_fingerprint_str: &str) -> Vec<f32> {
     }
 
     let attention_sum: f32 = attention.iter().sum();
+
+    dbg!(&attention);
 
     return attention.iter().map(|x| x / attention_sum).collect();
 }

@@ -55,6 +55,4 @@ fn main() {
 
 ## TODO
 
-Use Mutex for multithreading, but save a copy of the value of the fingerprint
-value in each thread and only check mutex when new fingerprint is above this
-value. The value is only going to increase :3
+Make this :3
