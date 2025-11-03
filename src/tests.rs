@@ -9,8 +9,9 @@ use crate::quality::get_similarity_map;
 fn validate_string_to_base_64_index() {
     let fingerprint = "+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU";
     let expected: [u8; constants::BASE_64_FINGERPRINT_LENGTH] = [
-        62, 3, 34, 24, 55, 48, 47, 47, 21, 58, 19, 46, 9, 9, 33, 27, 41, 25, 34, 44, 5, 63, 51, 11,
-        3, 0, 52, 51, 15, 12, 18, 47, 7, 29, 36, 43, 56, 20, 47, 2, 14, 42, 20,
+        62, 3, 34, 24, 55, 48, 47, 47, 21, 58, 19, 46, 9, 9, 33, 27, 41, 25,
+        34, 44, 5, 63, 51, 11, 3, 0, 52, 51, 15, 12, 18, 47, 7, 29, 36, 43, 56,
+        20, 47, 2, 14, 42, 20,
     ];
 
     assert_eq!(quality::fingerprint_str_to_b64_index(fingerprint), expected);
@@ -30,7 +31,8 @@ fn max_similarity() {
     assert_eq!(max, 1.0)
 }
 
-fn gen_quaility_simalarity_and_attention() -> (quality::SimilarityMap, Vec<f32>) {
+fn gen_quaility_simalarity_and_attention() -> (quality::SimilarityMap, Vec<f32>)
+{
     let fingerprint = "+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU";
 
     let attention = gen_attention_vec(fingerprint);
@@ -44,7 +46,8 @@ fn gen_quaility_simalarity_and_attention() -> (quality::SimilarityMap, Vec<f32>)
 fn identical_fingerprint_quaility() {
     let fingerprint = "+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU";
 
-    let fingerprint_b64_index = quality::fingerprint_str_to_b64_index(fingerprint);
+    let fingerprint_b64_index =
+        quality::fingerprint_str_to_b64_index(fingerprint);
 
     let (similarity_map, attention) = gen_quaility_simalarity_and_attention();
 
@@ -66,7 +69,8 @@ fn example_quaility() {
 
     let (similarity_map, attention) = gen_quaility_simalarity_and_attention();
 
-    let target_b64_index = quality::fingerprint_str_to_b64_index(target_fingerprint);
+    let target_b64_index =
+        quality::fingerprint_str_to_b64_index(target_fingerprint);
 
     assert!(
         quality::fingerprint_quality(

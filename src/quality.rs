@@ -26,7 +26,8 @@ pub fn gen_attention_vec(target_fingerprint_str: &str) -> Vec<f32> {
     // Generate an exponential curve
 
     let lambda = 16.2;
-    let exponential_curve = |x: f32| std::f32::consts::E.powf(-1.0 * lambda * x);
+    let exponential_curve =
+        |x: f32| std::f32::consts::E.powf(-1.0 * lambda * x);
 
     let attention_function = |x: f32| -> f32 {
         exponential_curve(x)
@@ -48,7 +49,7 @@ pub fn gen_attention_vec(target_fingerprint_str: &str) -> Vec<f32> {
 
     let attention_sum: f32 = attention.iter().sum();
 
-    dbg!(&attention);
+    // dbg!(&attention);
 
     return attention.iter().map(|x| x / attention_sum).collect();
 }
@@ -63,12 +64,16 @@ pub fn gen_attention_vec(target_fingerprint_str: &str) -> Vec<f32> {
 pub fn get_similarity_map(filepath: &str) -> SimilarityMap {
     let mut map = HashMap::with_capacity(32 * 63);
 
-    let json_file = fs::File::open(filepath).expect(&format!("Can't open {}", filepath));
+    let json_file =
+        fs::File::open(filepath).expect(&format!("Can't open {}", filepath));
 
-    let similarity: serde_json::Value = serde_json::from_reader(json_file).unwrap();
+    let similarity: serde_json::Value =
+        serde_json::from_reader(json_file).unwrap();
     for i in 0..64 {
         for j in i..64 {
-            if let serde_json::Value::Number(pair_similarity) = &similarity[i][j] {
+            if let serde_json::Value::Number(pair_similarity) =
+                &similarity[i][j]
+            {
                 let pair_similarity = pair_similarity.as_u64().unwrap();
 
                 if 10 < pair_similarity {
@@ -90,7 +95,8 @@ pub fn fingerprint_str_to_b64_index(
 ) -> [u8; constants::BASE_64_FINGERPRINT_LENGTH] {
     let mut fingerprint = [0_u8; 43];
 
-    for (index, character_byte) in stripped_fingerprint_str.bytes().enumerate() {
+    for (index, character_byte) in stripped_fingerprint_str.bytes().enumerate()
+    {
         match character_byte {
             // A-Z
             65..91 => fingerprint[index] = character_byte - 65,
@@ -107,7 +113,10 @@ pub fn fingerprint_str_to_b64_index(
             // /
             47 => fingerprint[index] = 63,
 
-            _ => panic!("Invalid base 64 char in fingerprint: {}", character_byte),
+            _ => panic!(
+                "Invalid base 64 char in fingerprint: {}",
+                character_byte
+            ),
         }
     }
 
@@ -123,7 +132,8 @@ pub fn fingerprint_quality(
     let candidate_fingerprint_b64_indexes =
         fingerprint_str_to_b64_index(strip_fingerprint(candidate_fingerprint));
 
-    let mut candidate_similarty: [f32; 43] = [0_f32; constants::BASE_64_FINGERPRINT_LENGTH];
+    let mut candidate_similarty: [f32; 43] =
+        [0_f32; constants::BASE_64_FINGERPRINT_LENGTH];
 
     for (index, pair) in target_fingerprint_b64_index
         .iter()

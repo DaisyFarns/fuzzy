@@ -19,9 +19,10 @@ enum Error {
 }
 
 fn is_base64(characters: &str) -> bool {
-    let alphabet: Vec<_> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-        .chars()
-        .collect();
+    let alphabet: Vec<_> =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+            .chars()
+            .collect();
 
     for char in characters.chars() {
         if !alphabet.contains(&char) {
@@ -60,7 +61,9 @@ fn parse_cli() -> Result<(), Error> {
             fingerprint = quality::strip_fingerprint(&fingerprint).to_string();
         }
 
-        if fingerprint.len() != constants::BASE_64_FINGERPRINT_LENGTH || !is_base64(&fingerprint) {
+        if fingerprint.len() != constants::BASE_64_FINGERPRINT_LENGTH
+            || !is_base64(&fingerprint)
+        {
             eprintln!(
                 "Fingerprint length must be {} characters of base64 without padding",
                 constants::BASE_64_FINGERPRINT_LENGTH

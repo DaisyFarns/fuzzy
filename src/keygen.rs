@@ -74,7 +74,8 @@ impl BestFingerprints {
         if self.best_keys.len() > constants::BEST_KEYS_NUMBER {
             self.best_keys.pop();
 
-            self.minimum_quality = self.best_keys.last().expect("Checked length").quality;
+            self.minimum_quality =
+                self.best_keys.last().expect("Checked length").quality;
         }
     }
 
@@ -102,8 +103,8 @@ impl BestFingerprints {
             "best_private_keys": private_keys
         });
 
-        let checkpoint_filepath =
-            path::Path::new(constants::KEYS_DIRECTORY).join(constants::CHECKPOINT_FILENAME);
+        let checkpoint_filepath = path::Path::new(constants::KEYS_DIRECTORY)
+            .join(constants::CHECKPOINT_FILENAME);
         let checkpoint_file = fs::File::create(checkpoint_filepath).unwrap();
 
         // Write checkpoint to file
@@ -114,13 +115,16 @@ impl BestFingerprints {
         for (index, key_info) in self.best_keys.iter().enumerate() {
             let private_key = &key_info.private_key;
 
-            let private_key_string = private_key.to_openssh(LineEnding::default()).unwrap();
+            let private_key_string =
+                private_key.to_openssh(LineEnding::default()).unwrap();
 
-            let public_key_string = private_key.public_key().to_openssh().unwrap();
+            let public_key_string =
+                private_key.public_key().to_openssh().unwrap();
 
             let key_path = path::Path::new(constants::KEYS_DIRECTORY);
             let private_key_file = key_path.join(format!("{}_id_spoof", index));
-            let public_key_file = key_path.join(format!("{}_id_spoof.pub", index));
+            let public_key_file =
+                key_path.join(format!("{}_id_spoof.pub", index));
 
             fs::File::create(private_key_file)
                 .unwrap()
@@ -138,14 +142,16 @@ impl BestFingerprints {
         let mut best_keys = Vec::new();
 
         let attention = quality::gen_attention_vec(&data.target);
-        let similarity = quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
+        let similarity =
+            quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
 
-        let target_base64_index =
-            quality::fingerprint_str_to_b64_index(quality::strip_fingerprint(&data.target));
+        let target_base64_index = quality::fingerprint_str_to_b64_index(
+            quality::strip_fingerprint(&data.target),
+        );
 
         for private_key_text in &data.best_private_keys {
-            let private_key =
-                PrivateKey::from_openssh(private_key_text).expect("Checkpoint file corrupted");
+            let private_key = PrivateKey::from_openssh(private_key_text)
+                .expect("Checkpoint file corrupted");
             let fingerprint = private_key
                 .public_key()
                 .fingerprint(constants::FINGERPRINT_HASH_ALGORITHM)
@@ -184,13 +190,15 @@ pub fn worker_function(
     attention_vec: &Vec<f32>,
     total_count: Arc<AtomicU64>,
 ) {
-    let target_base64_index =
-        quality::fingerprint_str_to_b64_index(quality::strip_fingerprint(target_fingerprint));
+    let target_base64_index = quality::fingerprint_str_to_b64_index(
+        quality::strip_fingerprint(target_fingerprint),
+    );
 
     let mut local_minimum_quality = 0.0;
 
     for _ in 0..constants::KEYS_PER_THREAD {
-        let private_key = PrivateKey::random(&mut OsRng, constants::KEY_TYPE).unwrap();
+        let private_key =
+            PrivateKey::random(&mut OsRng, constants::KEY_TYPE).unwrap();
         let public_key = private_key.public_key();
 
         let fingerprint = public_key
@@ -234,8 +242,8 @@ pub fn display_status_thread(
         let best_result = inner.best_keys.first().expect("No fingerprints yet");
         inner.save_checkpoint(target);
 
-        let key_gen_rate =
-            total_keys.load(Ordering::Relaxed) as f64 / start_time.elapsed().as_secs_f64();
+        let key_gen_rate = total_keys.load(Ordering::Relaxed) as f64
+            / start_time.elapsed().as_secs_f64();
 
         println!("");
         println!(
@@ -260,8 +268,8 @@ struct CheckPoint {
 }
 
 pub fn continue_from_checkpoint() -> io::Result<()> {
-    let checkpoint_filepath =
-        path::Path::new(constants::KEYS_DIRECTORY).join(constants::CHECKPOINT_FILENAME);
+    let checkpoint_filepath = path::Path::new(constants::KEYS_DIRECTORY)
+        .join(constants::CHECKPOINT_FILENAME);
     let checkpoint_file = fs::File::open(checkpoint_filepath)?;
     let checkpoint: CheckPoint = serde_json::from_reader(checkpoint_file)
         .unwrap_or_else(|e| panic!("Failed to parse JSON checkpoint: {}", e));
@@ -280,27 +288,29 @@ fn generate_keys(target_fingerprint: &str, best_keys: BestFingerprints) {
     let best_keys = Arc::new(Mutex::new(best_keys));
 
     let attention = quality::gen_attention_vec(target_fingerprint);
-    let similarity = quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
+    let similarity =
+        quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
 
     let total_keys_generated = Arc::new(AtomicU64::new(0));
 
-    let endless_iter = iter::repeat((Arc::clone(&best_keys), Arc::clone(&total_keys_generated)));
+    let endless_iter = iter::repeat((
+        Arc::clone(&best_keys),
+        Arc::clone(&total_keys_generated),
+    ));
 
-    let endless_iter =
-        endless_iter
-            .par_bridge()
-            .into_par_iter()
-            .map(|(thread_best_keys, thread_total_keys)| {
-                worker_function(
-                    &target_fingerprint,
-                    thread_best_keys,
-                    &similarity,
-                    &attention,
-                    thread_total_keys,
-                );
+    let endless_iter = endless_iter.par_bridge().into_par_iter().map(
+        |(thread_best_keys, thread_total_keys)| {
+            worker_function(
+                &target_fingerprint,
+                thread_best_keys,
+                &similarity,
+                &attention,
+                thread_total_keys,
+            );
 
-                return false;
-            });
+            return false;
+        },
+    );
 
     let start_time = time::Instant::now();
 
@@ -347,7 +357,8 @@ pub fn test_worker() {
     let best_fingerprints = Arc::new(Mutex::new(BestFingerprints::new()));
 
     let attention_vec = quality::gen_attention_vec(&target_fingerprint);
-    let similarity = quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
+    let similarity =
+        quality::get_similarity_map(constants::SIMILARITY_FILEPATH);
 
     worker_function(
         &target_fingerprint,
