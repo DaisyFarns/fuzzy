@@ -61,6 +61,13 @@ b"1234" in ASCII:
 
 `A6xnQhbz4Vx2HuGl4lXwZ5U2I8iziLRFnhP5eNfIRvQ`
 
+After running on my laptop over night trying to match it, I came up with this:
+
+```
+best result: A6xnWEkIV9wQ+db6YjUH5dJP7ZiEZTJS4auU9FjIT3Q
+     target: A6xnQhbz4Vx2HuGl4lXwZ5U2I8iziLRFnhP5eNfIRvQ
+```
+
 ## Timings
 
 This quality of the fingerprints generated is limited by the rate at which you
