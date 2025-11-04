@@ -8,7 +8,7 @@ cursory glance during manual verification (when it's missing from the
 
 This is achieved by brute forcing SSH keys and fingerprints and then measuring
 their "quality" of it compared to the target. This is based an attention
-function, and a similarity matrix
+function, and a similarity matrix.
 
 The attention function makes the program focus on the first few and last few
 characters of the fingerprint, which are the ones people will be willing to
@@ -131,14 +131,14 @@ multiplication. The private keys are effectively single random numbers. To
 make a public key, you need to take a 'base point' on the curve and 'multiply'
 by a scaler value. This multiplication is a lot different to scaler
 multiplication although shares a lot of properties, for example that for a
-point `P`, `P + P + P = 2P`, and `4P + 3P = 7P`.
+point `P`, `P + P + P = 3P`, and `4P + 3P = 7P`.
 
 So the private key is the scaler value `k`, and the public key is the point
 `kP`. In order to calculate `kP`, hundreds of point additions must be
 preformed, which is the hot code in this program currently. But, if a private
 and public key was already generated, then the creation of the next key pair
 would be computationally much easier. The private component would be `k + 1`
-and the public point would be `kP + P`, requiring only a single point addition
+and the public point would be `kP + P`, requiring only a single point addition.
 
 Using the [underlying](https://github.com/mstange/samply) implementation of
 these curves, this key generation method would dramatically improve performance.
